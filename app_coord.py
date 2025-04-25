@@ -453,7 +453,7 @@ def analyze_posting_frequency(df):
 def analyze_time_patterns(df):
     """Analyze posting time patterns"""
     # Convert timestamp to datetime
-    df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
+    #df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
 
     # Extract hour, day of week, and day of month
     df['hour'] = df['datetime'].dt.hour
