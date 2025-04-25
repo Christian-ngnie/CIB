@@ -47,6 +47,11 @@ import cv2
 import imagehash
 from io import BytesIO
 import tempfile
+try:
+    from dateutil import parser
+except ImportError:
+    pass  # We'll handle this in the parse_date function
+
 
 # Set page config
 st.set_page_config(
@@ -74,6 +79,24 @@ def download_nltk_resources():
 
 download_nltk_resources()
 
+def standardize_column_names(df):
+    """Standardize column names to lowercase and fix any naming inconsistencies"""
+    # Create a mapping of original columns to standardized versions
+    column_map = {
+        'Author': 'author',
+        'Post': 'post',
+        'Publication date': 'publication_date',
+        'URL': 'url',
+        'Platform': 'platform'
+    }
+    
+    # Rename columns that exist in the dataframe
+    for old_col, new_col in column_map.items():
+        if old_col in df.columns:
+            df = df.rename(columns={old_col: new_col})
+    
+    return df
+    
 # Initialize database
 def init_db():
     conn = sqlite3.connect('coordination_data.db')
@@ -144,20 +167,34 @@ def parse_date(date_str):
             except ValueError:
                 continue
 
-        # If no format matches, try dateutil parser
-        from dateutil import parser
-        dt = parser.parse(date_str)
-        return dt, int(dt.timestamp())
+        # If no format matches, try dateutil parser if available
+        try:
+            from dateutil import parser
+            dt = parser.parse(date_str)
+            return dt, int(dt.timestamp())
+        except ImportError:
+            # Fallback if dateutil is not available
+            current_time = datetime.datetime.now()
+            return current_time, int(current_time.timestamp())
+        
     except Exception as e:
         current_time = datetime.datetime.now()
         return current_time, int(current_time.timestamp())
+
 
 def detect_language(text):
     """Simple language detection"""
     try:
         if not text or len(str(text).strip()) < 10:
             return "unknown"
-        return detect(str(text))
+        
+        try:
+            from langdetect import detect
+            return detect(str(text))
+        except ImportError:
+            # Fallback if langdetect is not available
+            return "en"  # Default to English
+            
     except:
         # If detection fails, make a simple guess
         text = str(text)
@@ -169,6 +206,7 @@ def detect_language(text):
             return "en"  # Likely English or similar
         else:
             return "unknown"
+
 
 def detect_media_references(text, url):
     """Detect references to media (images, videos) in text or URL"""
@@ -241,16 +279,16 @@ def save_to_database(data, conn):
     # Process each row of data
     for _, row in data.iterrows():
         # Generate a unique content_id
-        content_id = hashlib.md5((str(row['Author']) + str(row['URL']) + str(row['Publication date'])).encode()).hexdigest()
+        content_id = hashlib.md5((str(row['author']) + str(row['url']) + str(row['publication_date'])).encode()).hexdigest()
 
         # Parse date and get timestamp
-        _, timestamp = parse_date(str(row['Publication date']))
+        _, timestamp = parse_date(str(row['publication_date']))
 
         # Detect if media is included
-        media_included = detect_media_references(str(row['Post']), str(row['URL']))
+        media_included = detect_media_references(str(row['post']), str(row['url']))
 
         # Detect language
-        language = detect_language(str(row['Post']))
+        language = detect_language(str(row['post']))
 
         # Insert data
         cursor.execute('''
@@ -259,12 +297,12 @@ def save_to_database(data, conn):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             content_id,
-            str(row['Author']),
-            str(row['Post']),
-            str(row['Publication date']),
+            str(row['author']),
+            str(row['post']),
+            str(row['publication_date']),
             timestamp,
-            str(row['URL']),
-            str(row['Platform']),
+            str(row['url']),
+            str(row['platform']),
             media_included,
             language,
             now
@@ -316,6 +354,7 @@ def load_from_database(conn, filters=None):
 
     return df
 
+
 # Analysis functions
 def analyze_platform_distribution(df):
     """Analyze the distribution of content across platforms"""
@@ -335,6 +374,7 @@ def analyze_platform_distribution(df):
     platform_stats = platform_counts.merge(platform_authors, on='Platform')
 
     return platform_stats
+
 
 def analyze_media_usage(df):
     """Analyze media usage patterns"""
@@ -1251,8 +1291,11 @@ def upload_data_component():
             elif uploaded_file.name.endswith('.xlsx'):
                 df = pd.read_excel(uploaded_file)
 
-            # Check required columns
-            required_columns = ['Author', 'Post', 'Publication date', 'URL', 'Platform']
+            # Standardize column names to lowercase
+            df = standardize_column_names(df)
+
+            # Check required columns (now using lowercase names)
+            required_columns = ['author', 'post', 'publication_date', 'url', 'platform']
             missing_columns = [col for col in required_columns if col not in df.columns]
 
             if missing_columns:
@@ -1267,8 +1310,8 @@ def upload_data_component():
             st.subheader("Data Summary")
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Posts", len(df))
-            col2.metric("Unique Authors", df['Author'].nunique())
-            col3.metric("Platforms", df['Platform'].nunique())
+            col2.metric("Unique Authors", df['author'].nunique())
+            col3.metric("Platforms", df['platform'].nunique())
 
             # Initialize database and save data
             conn = init_db()
@@ -1341,6 +1384,7 @@ def filter_options_component(conn):
 
     return filters
 
+
 def platform_analysis_tab(df):
     """Tab content for platform distribution analysis"""
     st.header("Platform Distribution Analysis")
@@ -1404,6 +1448,7 @@ def platform_analysis_tab(df):
         barmode='group'
     )
     st.plotly_chart(fig)
+
 
 def media_analysis_tab(df):
     """Tab content for media usage analysis"""
