@@ -185,7 +185,7 @@ def parse_date(date_str):
 def detect_language(text):
     """Simple language detection"""
     try:
-        if not text or len(str(text).strip()) < 10:
+        if not text or len(str(text).strip()) < 3:
             return "unknown"
         
         try:
