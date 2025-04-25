@@ -153,6 +153,19 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
+def clean_text_t(text):
+        # Convert to string if not already
+        text = str(text)
+        
+        # Remove URLs, special chars, numbers
+        text = re.sub(r'http\S+', '', text)
+        text = re.sub(r'[^a-zA-ZÀ-ÿ\s]', '', text)
+        
+        # Remove short words (length < 3)
+        text = ' '.join([word for word in text.split() if len(word) > 2])
+        
+        return text.strip().lower()
+
 def parse_date(date_str):
     """Parse date string to timestamp"""
     try:
