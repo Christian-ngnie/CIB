@@ -85,7 +85,7 @@ def standardize_column_names(df):
     column_map = {
         'Author': 'author',
         'Post': 'post',
-        'Publication date': 'publication_date',
+        'Publication Date': 'publication_date',  # Changed from 'Publication date' to 'Publication Date'
         'URL': 'url',
         'Platform': 'platform'
     }
