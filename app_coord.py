@@ -1478,7 +1478,7 @@ def media_analysis_tab(df):
         st.subheader("Media Usage by Platform")
         fig = px.bar(
             media_results['by_platform'],
-            x='Platform',
+            x='platform',
             y='Percentage',
             title='Percentage of Posts with Media by Platform'
         )
