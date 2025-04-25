@@ -1953,97 +1953,27 @@ def campaign_analysis_tab(df, temporal_windows):
         st.json(scale_assessment['metrics'])
 
 def topic_analysis_tab(df):
-    """Tab content for topic analysis"""
+    """Complete topic analysis tab with enhanced structure"""
     st.header("Topic Analysis")
-
+    
     if df.empty:
         st.warning("No data available for topic analysis.")
-        return
+        return None
 
-    # Analyze topics
+    # Run topic analysis
     topic_results = analyze_topic_patterns(df)
+    
+    # Handle empty results
+    if topic_results['top_topics'].empty:
+        st.warning("Could not generate meaningful topics from the data")
+        return None
 
-    # Display overall top topics
-    st.subheader("Top Topics Across All Content")
-
-    if not topic_results['top_topics'].empty:
-        # Create bar chart of top topics
-        fig = px.bar(
-            topic_results['top_topics'].head(15),
-            x='Topic',
-            y='Importance',
-            title='Top 15 Topics by Importance'
-        )
-        st.plotly_chart(fig)
-
-        # Word cloud
-        if not topic_results['top_topics'].empty:
-            st.subheader("Topic Word Cloud")
-
-            topic_dict = dict(zip(topic_results['top_topics']['Topic'], topic_results['top_topics']['Importance']))
-
-            # Generate word cloud
-            wordcloud = WordCloud(
-                width=800,
-                height=400,
-                background_color='white',
-                colormap='viridis',
-                max_words=100
-            ).generate_from_frequencies(topic_dict)
-
-            # Display word cloud
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.axis('off')
-            st.pyplot(fig)
-    else:
-        st.info("No topic data available.")
-
-    # Topics by platform
-    st.subheader("Top Topics by Platform")
-
-    if not topic_results['platform_topics'].empty:
-        # Group by platform
-        platforms = topic_results['platform_topics']['Platform'].unique()
-
-        for platform in platforms:
-            with st.expander(f"Topics on {platform}"):
-                platform_data = topic_results['platform_topics'][
-                    topic_results['platform_topics']['Platform'] == platform
-                ].sort_values('Importance', ascending=False).head(10)
-
-                fig = px.bar(
-                    platform_data,
-                    x='Topic',
-                    y='Importance',
-                    title=f'Top 10 Topics on {platform}'
-                )
-                st.plotly_chart(fig)
-    else:
-        st.info("No platform topic data available.")
-
-    # Topics by author
-    st.subheader("Author Topic Analysis")
-
-    if not topic_results['author_topics'].empty:
-        # Get top authors by topic count
-        top_authors = topic_results['author_topics']['Author'].value_counts().head(5).index.tolist()
-
-        for author in top_authors:
-            with st.expander(f"Topics for {author}"):
-                author_data = topic_results['author_topics'][
-                    topic_results['author_topics']['Author'] == author
-                ].sort_values('Importance', ascending=False).head(10)
-
-                fig = px.bar(
-                    author_data,
-                    x='Topic',
-                    y='Importance',
-                    title=f'Top 10 Topics for {author}'
-                )
-                st.plotly_chart(fig)
-    else:
-        st.info("No author topic data available.")
+    # Display visualizations
+    try:
+        display_topic_analysis(topic_results)
+    except Exception as e:
+        st.error(f"Error displaying topics: {str(e)}")
+        return None
 
     return topic_results
 
