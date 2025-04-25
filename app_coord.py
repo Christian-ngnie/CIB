@@ -835,6 +835,7 @@ def analyze_topic_patterns(df):
     """Analyze topic patterns using TF-IDF to identify targeted topics"""
     # Clean posts for topic analysis
     df['clean_post'] = df['post'].apply(clean_text)
+    df['clean_post'] = df['clean_post'].apply(clean_text_t)
 
     # Skip empty posts
     df_topics = df[df['clean_post'].str.len() > 10].copy()
