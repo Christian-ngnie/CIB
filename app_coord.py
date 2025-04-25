@@ -843,8 +843,14 @@ def analyze_topic_patterns(df):
     if len(df_topics) < 5:
         return {'top_topics': pd.DataFrame(), 'author_topics': pd.DataFrame(), 'platform_topics': pd.DataFrame()}
 
+    # Custom stopwords handling
+    french_stop = set(stopwords.words('french'))
+    english_stop = set(stopwords.words('english'))
+    custom_stop = {'la', 'le', 'les', 'est', 'et', 'une', 'aucune', 'maman'}
+    combined_stop = french_stop.union(english_stop).union(custom_stop)
+    
     # Vectorize text
-    vectorizer = TfidfVectorizer(max_features=1000, stop_words='english', ngram_range=(1, 2))
+    vectorizer = TfidfVectorizer(max_features=1000, stop_words=list(combined_stop), ngram_range=(2, 3))
     tfidf_matrix = vectorizer.fit_transform(df_topics['clean_post'])
 
     # Get feature names
