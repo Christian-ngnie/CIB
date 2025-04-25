@@ -550,7 +550,7 @@ def detect_temporal_patterns(df):
 
     # Create a copy with datetime
     temp_df = df.copy()
-    temp_df['datetime'] = pd.to_datetime(temp_df['timestamp'], unit='s')
+    #temp_df['datetime'] = pd.to_datetime(temp_df['timestamp'], unit='s')
 
     # Sort by timestamp
     temp_df = temp_df.sort_values('timestamp')
