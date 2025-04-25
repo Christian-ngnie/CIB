@@ -832,76 +832,131 @@ def identify_coordination_networks(df, content_sim_df, temporal_windows, url_pat
         'scores': coord_scores
     }
 def analyze_topic_patterns(df):
-    """Analyze topic patterns using TF-IDF to identify targeted topics"""
-    # Clean posts for topic analysis
+    """Analyze topic patterns using advanced NLP techniques"""
+
+    # Prepare text data
     df['clean_post'] = df['post'].apply(clean_text)
     df['clean_post'] = df['clean_post'].apply(clean_text_t)
-
-    # Skip empty posts
     df_topics = df[df['clean_post'].str.len() > 10].copy()
 
     if len(df_topics) < 5:
-        return {'top_topics': pd.DataFrame(), 'author_topics': pd.DataFrame(), 'platform_topics': pd.DataFrame()}
+        return {'top_topics': pd.DataFrame(), 'topic_model': None}
 
     # Custom stopwords handling
     french_stop = set(stopwords.words('french'))
     english_stop = set(stopwords.words('english'))
-    custom_stop = {'la', 'le', 'les', 'est', 'et', 'une', 'aucune', 'maman'}
+    custom_stop = {'la', 'le', 'les', 'est', 'et', 'une', 'aucune', 'sextape', 'maman'}
     combined_stop = french_stop.union(english_stop).union(custom_stop)
-    
-    # Vectorize text
-    vectorizer = TfidfVectorizer(max_features=1000, stop_words=list(combined_stop), ngram_range=(2, 3))
-    tfidf_matrix = vectorizer.fit_transform(df_topics['clean_post'])
 
-    # Get feature names
+    # Advanced vectorization with bigrams/trigrams
+    vectorizer = TfidfVectorizer(
+        max_features=1000,
+        stop_words=list(combined_stop),
+        ngram_range=(2, 3),  # Focus on meaningful phrases
+        min_df=3,            # Ignore rare terms
+        max_df=0.8           # Ignore overly common terms
+    )
+
+    tfidf_matrix = vectorizer.fit_transform(df_topics['clean_post'])
     feature_names = vectorizer.get_feature_names_out()
 
-    # Get top terms overall
-    importance = np.asarray(tfidf_matrix.mean(axis=0)).flatten()
-    indices = importance.argsort()[-20:][::-1]
-    top_terms = [(feature_names[i], importance[i]) for i in indices]
-    top_topics_df = pd.DataFrame(top_terms, columns=['Topic', 'Importance'])
+    # Apply LDA for topic modeling
+    lda = LatentDirichletAllocation(
+        n_components=8,          # Number of topics to extract
+        learning_method='online',
+        random_state=42,
+        max_iter=20
+    )
+    lda.fit(tfidf_matrix)
 
-    # Get top terms by author
-    author_topics = {}
-    for author in df_topics['author'].unique():
-        author_posts = df_topics[df_topics['author'] == author]
-        if len(author_posts) >= 3:  # Minimum posts for topic analysis
-            author_tfidf = vectorizer.transform(author_posts['clean_post'])
-            author_importance = np.asarray(author_tfidf.mean(axis=0)).flatten()
-            author_indices = author_importance.argsort()[-10:][::-1]
-            author_topics[author] = [(feature_names[i], author_importance[i]) for i in author_indices]
+    # Extract and format topics
+    def get_topics(model, feature_names, n_words=5):
+        topics = []
+        for topic_idx, topic in enumerate(model.components_):
+            top_features = [feature_names[i] for i in topic.argsort()[:-n_words - 1:-1]]
+            topics.append({
+                'topic_id': topic_idx + 1,
+                'keywords': ", ".join(top_features),
+                'coherence_score': np.mean(topic)  # Simplified coherence measure
+            })
+        return pd.DataFrame(topics)
 
-    # Convert author topics to DataFrame
-    author_topics_rows = []
-    for author, topics in author_topics.items():
-        for topic, importance in topics:
-            author_topics_rows.append({'Author': author, 'Topic': topic, 'Importance': importance})
-    author_topics_df = pd.DataFrame(author_topics_rows)
+    topics_df = get_topics(lda, feature_names)
 
-    # Get top terms by platform
-    platform_topics = {}
-    for platform in df_topics['platform'].unique():
-        platform_posts = df_topics[df_topics['platform'] == platform]
-        if len(platform_posts) >= 3:  # Minimum posts for topic analysis
-            platform_tfidf = vectorizer.transform(platform_posts['clean_post'])
-            platform_importance = np.asarray(platform_tfidf.mean(axis=0)).flatten()
-            platform_indices = platform_importance.argsort()[-10:][::-1]
-            platform_topics[platform] = [(feature_names[i], platform_importance[i]) for i in platform_indices]
+    # Analyze topic distribution across content
+    topic_results = lda.transform(tfidf_matrix)
+    dominant_topics = topic_results.argmax(axis=1)
+    df_topics['dominant_topic'] = dominant_topics + 1
 
-    # Convert platform topics to DataFrame
-    platform_topics_rows = []
-    for platform, topics in platform_topics.items():
-        for topic, importance in topics:
-            platform_topics_rows.append({'Platform': platform, 'Topic': topic, 'Importance': importance})
-    platform_topics_df = pd.DataFrame(platform_topics_rows)
+    # Calculate topic prevalence
+    topic_dist = df_topics['dominant_topic'].value_counts().reset_index()
+    topic_dist.columns = ['topic_id', 'post_count']
+    topic_dist['percentage'] = (topic_dist['post_count'] / len(df_topics) * 100).round(2)
+    topics_df = topics_df.merge(topic_dist, on='topic_id')
 
     return {
-        'top_topics': top_topics_df,
-        'author_topics': author_topics_df,
-        'platform_topics': platform_topics_df
+        'top_topics': topics_df.sort_values('post_count', ascending=False),
+        'topic_model': lda,
+        'vectorizer': vectorizer,
+        'df_with_topics': df_topics
     }
 
+def display_topic_analysis(topic_results):
+    """Enhanced visualization for topic analysis"""
+    st.header("Advanced Topic Analysis")
+    
+    if topic_results['top_topics'].empty:
+        st.warning("No meaningful topics detected")
+        return
+
+    # Display interactive topic explorer
+    st.subheader("Topic Keyword Clouds")
+    cols = st.columns(2)
+    
+    for idx, row in topic_results['top_topics'].iterrows():
+        with cols[idx % 2]:
+            with st.expander(f"Topic {row['topic_id']}: {row['keywords'].split(',')[0]}"):
+                # Generate word cloud
+                keywords = dict(zip(row['keywords'].split(', '), 
+                                  np.linspace(1, 0.5, len(row['keywords'].split(', ')))))
+                
+                wc = WordCloud(width=400, height=200, background_color='white',
+                             colormap='viridis').generate_from_frequencies(keywords)
+                
+                fig, ax = plt.subplots()
+                ax.imshow(wc, interpolation='bilinear')
+                ax.axis('off')
+                st.pyplot(fig)
+                
+                # Display metadata
+                st.caption(f"Prevalence: {row['percentage']}% of posts")
+                st.caption(f"Key phrases: {row['keywords']}")
+
+    # Temporal analysis of topics
+    st.subheader("Topic Trends Over Time")
+    try:
+        df = topic_results['df_with_topics']
+        df['date'] = pd.to_datetime(df['timestamp'], unit='s').dt.date
+        
+        time_series = df.groupby(['date', 'dominant_topic']).size().unstack().fillna(0)
+        time_series = time_series.rolling(7).mean()  # 7-day moving average
+        
+        fig = px.line(time_series, x=time_series.index, y=time_series.columns,
+                     labels={'value': 'Posts (7-day avg)', 'date': ''},
+                     title="Topic Prevalence Over Time")
+        st.plotly_chart(fig)
+    except Exception as e:
+        st.error(f"Could not generate temporal analysis: {str(e)}")
+
+    # Cross-platform topic analysis
+    st.subheader("Topic Distribution by Platform")
+    platform_topics = df.groupby(['platform', 'dominant_topic']).size().unstack().fillna(0)
+    platform_topics = platform_topics.div(platform_topics.sum(axis=1), axis=0)  # Normalize
+    
+    fig = px.imshow(platform_topics.T,
+                   labels=dict(x="Platform", y="Topic", color="Percentage"),
+                   color_continuous_scale='Viridis')
+    st.plotly_chart(fig)
 def analyze_image_sharing(df):
     """Analyze patterns in image sharing"""
     # Filter posts with media
